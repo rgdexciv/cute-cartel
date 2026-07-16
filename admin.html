@@ -183,12 +183,6 @@
   .btn.pink{background:var(--sakura-deep);color:#fff}
   .btn.mini{padding:6px 12px;font-size:.78rem;box-shadow:2px 2px 0 var(--ink)}
 
-  .demo-flag{
-    position:fixed;bottom:14px;right:14px;z-index:20;
-    background:var(--butter);border:var(--outline);border-radius:999px;
-    padding:8px 16px;font-size:.78rem;font-weight:700;box-shadow:var(--pop-sm);
-  }
-
   @media(max-width:900px){
     .stats{grid-template-columns:repeat(2,1fr)}
     .grid2{grid-template-columns:1fr}
@@ -210,18 +204,23 @@
     <span class="logo-badge">🍬 CUTE CARTEL</span>
     <h1>Admin HQ</h1>
     <p class="sub">Contraband levels of cute — staff only.</p>
-    <form onsubmit="enterApp(event)">
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="email" value="owner@cutecartel.ph" required>
-      </div>
-      <div class="field">
+    <form id="loginForm">
+      <div class="field" id="stepPass">
         <label>Password</label>
-        <input type="password" id="pass" value="••••••••" required>
+        <input type="password" id="pass" autocomplete="current-password" required>
       </div>
-      <button class="btn-primary" type="submit">Enter HQ →</button>
+      <div class="field" id="stepCode" style="display:none">
+        <label>2FA Code</label>
+        <input type="text" id="totp" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
+      </div>
+      <div id="enrollBox" style="display:none">
+        <p class="hint" style="margin:0 0 8px">First login — scan with your authenticator app, then enter the 6-digit code above.</p>
+        <img id="enrollQr" alt="TOTP QR code" style="width:170px;height:170px;display:block;margin:0 auto 8px;border-radius:12px;background:#fff">
+        <p id="enrollSecret" style="font-family:monospace;font-size:.72rem;word-break:break-all;text-align:center;margin:0 0 10px"></p>
+      </div>
+      <button class="btn-primary" type="submit" id="loginBtn">Enter HQ →</button>
     </form>
-    <p class="hint">Demo preview — press <code>Enter HQ</code> to explore. No real login.</p>
+    <p class="hint" id="loginMsg"></p>
   </div>
 </div>
 
@@ -436,18 +435,104 @@
 </div>
 </div>
 
-<div class="demo-flag">🎨 Demo preview · mock data</div>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  function enterApp(e){
-    e.preventDefault();
-    document.getElementById('login').style.display='none';
-    document.getElementById('app').style.display='block';
+  var SUPABASE_URL = 'https://baanepuuakjowgfczbzf.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_nmUtm9Yu4V1fuk0cmRvj1g_WXlaBggd';
+  var ADMIN_EMAIL = 'rgdexciv@gmail.com';
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var $ = function(id){ return document.getElementById(id); };
+  var pendingFactorId = null;
+  var enrolling = false;
+
+  function msg(t){ $('loginMsg').textContent = t || ''; }
+
+  function showApp(){
+    $('login').style.display = 'none';
+    $('app').style.display = 'block';
+  }
+  function showLogin(){
+    $('app').style.display = 'none';
+    $('login').style.display = 'flex';
+    $('stepPass').style.display = '';
+    $('stepCode').style.display = 'none';
+    $('enrollBox').style.display = 'none';
+    $('pass').value = ''; $('totp').value = '';
+    pendingFactorId = null; enrolling = false;
+    msg('');
   }
   function logout(){
-    document.getElementById('app').style.display='none';
-    document.getElementById('login').style.display='flex';
+    sb.auth.signOut().then(showLogin);
   }
+
+  // Require a fully MFA-verified (AAL2) session before showing the app.
+  function checkSession(){
+    sb.auth.mfa.getAuthenticatorAssuranceLevel().then(function(r){
+      if(r.data && r.data.currentLevel === 'aal2'){ showApp(); }
+    });
+  }
+  checkSession();
+
+  function beginMfaStep(){
+    sb.auth.mfa.listFactors().then(function(r){
+      if(r.error){ msg(r.error.message); return; }
+      var totp = (r.data && r.data.totp) || [];
+      var verified = totp.filter(function(f){ return f.status === 'verified'; });
+      $('stepPass').style.display = 'none';
+      $('stepCode').style.display = '';
+      if(verified.length){
+        pendingFactorId = verified[0].id;
+        enrolling = false;
+        msg('Enter your 2FA code.');
+        $('totp').focus();
+      } else {
+        // First login: enroll a TOTP factor, show QR, verify below.
+        sb.auth.mfa.enroll({ factorType: 'totp' }).then(function(e){
+          if(e.error){ msg(e.error.message); return; }
+          pendingFactorId = e.data.id;
+          enrolling = true;
+          $('enrollQr').src = e.data.totp.qr_code;
+          $('enrollSecret').textContent = 'Secret: ' + e.data.totp.secret;
+          $('enrollBox').style.display = 'block';
+          msg('');
+          $('totp').focus();
+        });
+      }
+    });
+  }
+
+  function verifyCode(code){
+    sb.auth.mfa.challenge({ factorId: pendingFactorId }).then(function(c){
+      if(c.error){ msg(c.error.message); return; }
+      sb.auth.mfa.verify({ factorId: pendingFactorId, challengeId: c.data.id, code: code }).then(function(v){
+        if(v.error){ msg('Wrong code. Try again.'); return; }
+        sb.auth.mfa.getAuthenticatorAssuranceLevel().then(function(r){
+          if(r.data && r.data.currentLevel === 'aal2'){ showApp(); }
+          else { msg('2FA verification incomplete.'); }
+        });
+      });
+    });
+  }
+
+  $('loginForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    if(pendingFactorId){
+      var code = $('totp').value.trim();
+      if(!/^\d{6}$/.test(code)){ msg('Enter the 6-digit code.'); return; }
+      msg('Verifying…');
+      verifyCode(code);
+      return;
+    }
+    var password = $('pass').value;
+    if(!password){ msg('Enter your password.'); return; }
+    msg('Checking…');
+    sb.auth.signInWithPassword({ email: ADMIN_EMAIL, password: password }).then(function(r){
+      if(r.error){ msg('Wrong password.'); return; }
+      msg('');
+      beginMfaStep();
+    });
+  });
   const titles={
     dashboard:['Dashboard','Tuesday, July 14 · Good afternoon, Mika 🌸'],
     inventory:['Inventory','Manage products, variants &amp; stock'],
