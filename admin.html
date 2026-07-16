@@ -232,7 +232,7 @@
     <a class="nav-item" data-view="sales" onclick="go('sales',this)"><span class="ic">💰</span> Sales</a>
     <a class="nav-item" data-view="users" onclick="go('users',this)"><span class="ic">👥</span> Users</a>
     <div class="spacer"></div>
-    <div class="userchip"><span class="av">M</span><div><strong>Mika</strong><br><span style="opacity:.7">Owner</span></div></div>
+    <div class="userchip"><span class="av">👑</span><div><strong>Admin</strong><br><span style="opacity:.7">Owner</span></div></div>
     <button class="logout" onclick="logout()">↩ Log out</button>
   </aside>
 
@@ -243,7 +243,7 @@
         <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰ Menu</button>
         <div>
           <h1 id="viewTitle">Dashboard</h1>
-          <div class="sub" id="viewSub">Tuesday, July 14 · Good afternoon, Mika 🌸</div>
+          <div class="sub" id="viewSub">Welcome back 🌸</div>
         </div>
       </div>
       <div class="search"><span>🔎</span><input placeholder="Search products, orders, customers…"></div>
@@ -252,33 +252,26 @@
     <!-- DASHBOARD -->
     <section class="view active" id="v-dashboard">
       <div class="stats">
-        <div class="stat p1"><div class="ic">💰</div><div class="label">Revenue (30d)</div><div class="value">₱182,450</div><div class="delta up">▲ 12.4% vs last month</div></div>
-        <div class="stat p2"><div class="ic">🧾</div><div class="label">Orders (30d)</div><div class="value">327</div><div class="delta up">▲ 8.1%</div></div>
-        <div class="stat p3"><div class="ic">⚠️</div><div class="label">Low stock</div><div class="value">6</div><div class="delta down">needs restock</div></div>
-        <div class="stat p4"><div class="ic">👥</div><div class="label">Customers</div><div class="value">1,204</div><div class="delta up">▲ 47 new</div></div>
+        <div class="stat p1"><div class="ic">💰</div><div class="label">Revenue (30d)</div><div class="value" id="statRevenue">—</div></div>
+        <div class="stat p2"><div class="ic">🧾</div><div class="label">Orders (30d)</div><div class="value" id="statOrders">—</div></div>
+        <div class="stat p3"><div class="ic">⚠️</div><div class="label">Low stock</div><div class="value" id="statLowStock">—</div></div>
+        <div class="stat p4"><div class="ic">👥</div><div class="label">Customers</div><div class="value" id="statCustomers">—</div></div>
       </div>
 
       <div class="grid2">
         <div class="panel">
-          <div class="panel-head"><div><h2>Sales this week</h2></div><span class="pill green">₱48,900</span></div>
+          <div class="panel-head"><div><h2>Sales this week</h2></div><span class="pill green" id="weekTotal">₱0</span></div>
           <div class="chart" id="chart">
-            <div class="bar"><div class="fill" style="height:45%"></div><span class="lbl">Mon</span></div>
-            <div class="bar"><div class="fill" style="height:62%"></div><span class="lbl">Tue</span></div>
-            <div class="bar"><div class="fill" style="height:38%"></div><span class="lbl">Wed</span></div>
-            <div class="bar"><div class="fill" style="height:74%"></div><span class="lbl">Thu</span></div>
-            <div class="bar"><div class="fill" style="height:90%"></div><span class="lbl">Fri</span></div>
-            <div class="bar"><div class="fill" style="height:68%"></div><span class="lbl">Sat</span></div>
-            <div class="bar"><div class="fill" style="height:82%"></div><span class="lbl">Sun</span></div>
+            <p class="phint" style="align-self:center;width:100%;text-align:center">No sales data yet.</p>
           </div>
         </div>
         <div class="panel">
           <h2>Low stock alerts</h2>
           <p class="phint">Restock soon 🚨</p>
           <table>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sakura)">🧸</span>Sakura Plushie · S</td><td class="stock-out">0 left</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">🧦</span>Mochi Socks · M</td><td class="stock-low">3 left</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sky)">🎀</span>Bow Clip · Blue</td><td class="stock-low">4 left</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--lavender)">👜</span>Cloud Tote · L</td><td class="stock-low">5 left</td></tr>
+            <tbody id="lowStockRows">
+              <tr><td class="phint">No low-stock items.</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -287,12 +280,8 @@
         <div class="panel-head"><div><h2>Recent orders</h2></div><button class="btn mini" onclick="go('orders',document.querySelector('[data-view=orders]'))">View all →</button></div>
         <table>
           <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td><strong>#CC-1042</strong></td><td>Andrea R.</td><td>2</td><td>₱1,240</td><td><span class="badge b-paid">Paid</span></td></tr>
-            <tr><td><strong>#CC-1041</strong></td><td>Josh delaCruz</td><td>1</td><td>₱680</td><td><span class="badge b-shipped">Shipped</span></td></tr>
-            <tr><td><strong>#CC-1040</strong></td><td>Bea Santos</td><td>4</td><td>₱2,910</td><td><span class="badge b-pending">Pending</span></td></tr>
-            <tr><td><strong>#CC-1039</strong></td><td>Kim P.</td><td>1</td><td>₱520</td><td><span class="badge b-cancel">Cancelled</span></td></tr>
-            <tr><td><strong>#CC-1038</strong></td><td>Marco Lim</td><td>3</td><td>₱1,875</td><td><span class="badge b-paid">Paid</span></td></tr>
+          <tbody id="recentOrderRows">
+            <tr><td colspan="5" class="phint">No orders yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -306,17 +295,11 @@
         <button class="btn">⬆ Export CSV</button>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Products &amp; variants</h2><span class="pill pink">48 SKUs</span></div>
+        <div class="panel-head"><h2>Products &amp; variants</h2><span class="pill pink" id="skuCount">0 SKUs</span></div>
         <table>
           <thead><tr><th>Product</th><th>SKU</th><th>Variant</th><th>Price</th><th>Stock</th></tr></thead>
-          <tbody>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sakura)">🧸</span>Sakura Plushie</td><td>CC-PLU-S</td><td>Small</td><td>₱690</td><td><span class="stock-out">Out</span><div class="stockbar"><i style="width:0%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sakura)">🧸</span>Sakura Plushie</td><td>CC-PLU-L</td><td>Large</td><td>₱990</td><td><span class="stock-ok">22</span><div class="stockbar"><i style="width:80%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">🧦</span>Mochi Socks</td><td>CC-SOC-M</td><td>Medium · Cream</td><td>₱280</td><td><span class="stock-low">3</span><div class="stockbar"><i style="width:12%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sky)">🎀</span>Bow Clip</td><td>CC-BOW-BLU</td><td>Blue</td><td>₱180</td><td><span class="stock-low">4</span><div class="stockbar"><i style="width:16%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--matcha)">🍵</span>Matcha Mug</td><td>CC-MUG-01</td><td>One size</td><td>₱450</td><td><span class="stock-ok">61</span><div class="stockbar"><i style="width:95%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--lavender)">👜</span>Cloud Tote</td><td>CC-TOT-L</td><td>Large · Lilac</td><td>₱620</td><td><span class="stock-low">5</span><div class="stockbar"><i style="width:20%"></i></div></td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">🧷</span>Sticker Pack</td><td>CC-STK-05</td><td>Set of 5</td><td>₱150</td><td><span class="stock-ok">140</span><div class="stockbar"><i style="width:100%"></i></div></td></tr>
+          <tbody id="inventoryRows">
+            <tr><td colspan="5" class="phint">No products yet. Add your first product to get started.</td></tr>
           </tbody>
         </table>
       </div>
@@ -332,17 +315,11 @@
         <button class="btn">⬆ Export CSV</button>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Orders</h2><span class="pill green">327 this month</span></div>
+        <div class="panel-head"><h2>Orders</h2><span class="pill green" id="orderCount">0 this month</span></div>
         <table>
           <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td><strong>#CC-1042</strong></td><td>Andrea R.</td><td>Jul 14</td><td>2</td><td>₱1,240</td><td>GCash</td><td><span class="badge b-paid">Paid</span></td></tr>
-            <tr><td><strong>#CC-1041</strong></td><td>Josh delaCruz</td><td>Jul 14</td><td>1</td><td>₱680</td><td>Card</td><td><span class="badge b-shipped">Shipped</span></td></tr>
-            <tr><td><strong>#CC-1040</strong></td><td>Bea Santos</td><td>Jul 13</td><td>4</td><td>₱2,910</td><td>Maya</td><td><span class="badge b-pending">Pending</span></td></tr>
-            <tr><td><strong>#CC-1039</strong></td><td>Kim P.</td><td>Jul 13</td><td>1</td><td>₱520</td><td>—</td><td><span class="badge b-cancel">Cancelled</span></td></tr>
-            <tr><td><strong>#CC-1038</strong></td><td>Marco Lim</td><td>Jul 12</td><td>3</td><td>₱1,875</td><td>GrabPay</td><td><span class="badge b-paid">Paid</span></td></tr>
-            <tr><td><strong>#CC-1037</strong></td><td>Trina G.</td><td>Jul 12</td><td>2</td><td>₱1,100</td><td>GCash</td><td><span class="badge b-shipped">Shipped</span></td></tr>
-            <tr><td><strong>#CC-1036</strong></td><td>Paolo M.</td><td>Jul 11</td><td>5</td><td>₱3,450</td><td>Card</td><td><span class="badge b-paid">Paid</span></td></tr>
+          <tbody id="orderRows">
+            <tr><td colspan="7" class="phint">No orders yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -351,44 +328,32 @@
     <!-- SALES -->
     <section class="view" id="v-sales">
       <div class="stats">
-        <div class="stat p1"><div class="ic">💰</div><div class="label">Gross sales</div><div class="value">₱182,450</div><div class="delta up">▲ 12.4%</div></div>
-        <div class="stat p2"><div class="ic">📈</div><div class="label">Avg order value</div><div class="value">₱558</div><div class="delta up">▲ 3.9%</div></div>
-        <div class="stat p3"><div class="ic">🎟️</div><div class="label">Discounts used</div><div class="value">₱9,120</div><div class="delta down">CUTE10, SUMMER</div></div>
-        <div class="stat p4"><div class="ic">↩️</div><div class="label">Refunds</div><div class="value">₱1,240</div><div class="delta up">0.7% rate</div></div>
+        <div class="stat p1"><div class="ic">💰</div><div class="label">Gross sales</div><div class="value" id="statGross">—</div></div>
+        <div class="stat p2"><div class="ic">📈</div><div class="label">Avg order value</div><div class="value" id="statAov">—</div></div>
+        <div class="stat p3"><div class="ic">🎟️</div><div class="label">Discounts used</div><div class="value" id="statDiscounts">—</div></div>
+        <div class="stat p4"><div class="ic">↩️</div><div class="label">Refunds</div><div class="value" id="statRefunds">—</div></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Revenue — last 12 weeks</h2><span class="pill pink">PayMongo</span></div>
-        <div class="chart">
-          <div class="bar"><div class="fill" style="height:40%"></div><span class="lbl">W1</span></div>
-          <div class="bar"><div class="fill" style="height:52%"></div><span class="lbl">W2</span></div>
-          <div class="bar"><div class="fill" style="height:48%"></div><span class="lbl">W3</span></div>
-          <div class="bar"><div class="fill" style="height:60%"></div><span class="lbl">W4</span></div>
-          <div class="bar"><div class="fill" style="height:55%"></div><span class="lbl">W5</span></div>
-          <div class="bar"><div class="fill" style="height:70%"></div><span class="lbl">W6</span></div>
-          <div class="bar"><div class="fill" style="height:66%"></div><span class="lbl">W7</span></div>
-          <div class="bar"><div class="fill" style="height:78%"></div><span class="lbl">W8</span></div>
-          <div class="bar"><div class="fill" style="height:72%"></div><span class="lbl">W9</span></div>
-          <div class="bar"><div class="fill" style="height:88%"></div><span class="lbl">W10</span></div>
-          <div class="bar"><div class="fill" style="height:83%"></div><span class="lbl">W11</span></div>
-          <div class="bar"><div class="fill" style="height:96%"></div><span class="lbl">W12</span></div>
+        <div class="panel-head"><h2>Revenue — last 12 weeks</h2></div>
+        <div class="chart" id="revenueChart">
+          <p class="phint" style="align-self:center;width:100%;text-align:center">No revenue data yet.</p>
         </div>
       </div>
       <div class="grid2" style="margin-top:16px">
         <div class="panel">
           <h2>Top sellers</h2><p class="phint">By units sold</p>
           <table>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">🧷</span>Sticker Pack</td><td><strong>412</strong> sold</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sakura)">🧸</span>Sakura Plushie</td><td><strong>288</strong> sold</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--matcha)">🍵</span>Matcha Mug</td><td><strong>176</strong> sold</td></tr>
+            <tbody id="topSellerRows">
+              <tr><td class="phint">No sales yet.</td></tr>
+            </tbody>
           </table>
         </div>
         <div class="panel">
           <h2>Payment mix</h2><p class="phint">This month</p>
           <table>
-            <tr><td>GCash</td><td><strong>44%</strong></td></tr>
-            <tr><td>Card</td><td><strong>28%</strong></td></tr>
-            <tr><td>Maya</td><td><strong>16%</strong></td></tr>
-            <tr><td>GrabPay</td><td><strong>12%</strong></td></tr>
+            <tbody id="paymentMixRows">
+              <tr><td class="phint">No payments yet.</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -402,25 +367,20 @@
         <button class="btn">Staff</button>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Staff</h2><span class="pill green">3 members</span></div>
+        <div class="panel-head"><h2>Staff</h2><span class="pill green" id="staffCount">1 member</span></div>
         <table>
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last active</th></tr></thead>
-          <tbody>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">M</span>Mika (you)</td><td>owner@cutecartel.ph</td><td><span class="badge b-paid">Owner</span></td><td>Now</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sky)">J</span>Jenn A.</td><td>jenn@cutecartel.ph</td><td><span class="badge b-shipped">Staff</span></td><td>2h ago</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--matcha)">R</span>Reg B.</td><td>reg@cutecartel.ph</td><td><span class="badge b-shipped">Staff</span></td><td>Yesterday</td></tr>
+          <tbody id="staffRows">
+            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">O</span>Owner (you)</td><td id="ownerEmail">—</td><td><span class="badge b-paid">Owner</span></td><td>Now</td></tr>
           </tbody>
         </table>
       </div>
       <div class="panel" style="margin-top:16px">
-        <div class="panel-head"><h2>Customers</h2><span class="pill pink">1,204 total</span></div>
+        <div class="panel-head"><h2>Customers</h2><span class="pill pink" id="customerCount">0 total</span></div>
         <table>
           <thead><tr><th>Name</th><th>Email</th><th>Orders</th><th>Spent</th><th>Joined</th></tr></thead>
-          <tbody>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sakura)">A</span>Andrea R.</td><td>andrea@gmail.com</td><td>12</td><td>₱14,200</td><td>Jan 2026</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--lavender)">B</span>Bea Santos</td><td>bea.s@gmail.com</td><td>9</td><td>₱9,880</td><td>Feb 2026</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--sky)">M</span>Marco Lim</td><td>marco@yahoo.com</td><td>7</td><td>₱8,150</td><td>Mar 2026</td></tr>
-            <tr><td class="prod"><span class="thumb" style="background:var(--butter)">T</span>Trina G.</td><td>trina.g@gmail.com</td><td>5</td><td>₱5,400</td><td>Apr 2026</td></tr>
+          <tbody id="customerRows">
+            <tr><td colspan="5" class="phint">No customers yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -445,6 +405,9 @@
   function showApp(){
     $('login').style.display = 'none';
     $('app').style.display = 'block';
+    sb.auth.getUser().then(function(r){
+      if(r.data && r.data.user){ $('ownerEmail').textContent = r.data.user.email; }
+    });
   }
   function showLogin(){
     $('app').style.display = 'none';
@@ -513,7 +476,7 @@
     });
   });
   const titles={
-    dashboard:['Dashboard','Tuesday, July 14 · Good afternoon, Mika 🌸'],
+    dashboard:['Dashboard','Welcome back 🌸'],
     inventory:['Inventory','Manage products, variants &amp; stock'],
     orders:['Orders','Track and fulfil customer orders'],
     sales:['Sales','Revenue, discounts &amp; payment insights'],
