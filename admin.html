@@ -213,11 +213,6 @@
         <label>2FA Code</label>
         <input type="text" id="totp" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
       </div>
-      <div id="enrollBox" style="display:none">
-        <p class="hint" style="margin:0 0 8px">First login — scan with your authenticator app, then enter the 6-digit code above.</p>
-        <img id="enrollQr" alt="TOTP QR code" style="width:170px;height:170px;display:block;margin:0 auto 8px;border-radius:12px;background:#fff">
-        <p id="enrollSecret" style="font-family:monospace;font-size:.72rem;word-break:break-all;text-align:center;margin:0 0 10px"></p>
-      </div>
       <button class="btn-primary" type="submit" id="loginBtn">Enter HQ →</button>
     </form>
     <p class="hint" id="loginMsg"></p>
@@ -444,7 +439,6 @@
 
   var $ = function(id){ return document.getElementById(id); };
   var pendingFactorId = null;
-  var enrolling = false;
 
   function msg(t){ $('loginMsg').textContent = t || ''; }
 
@@ -457,9 +451,8 @@
     $('login').style.display = 'flex';
     $('stepPass').style.display = '';
     $('stepCode').style.display = 'none';
-    $('enrollBox').style.display = 'none';
     $('pass').value = ''; $('totp').value = '';
-    pendingFactorId = null; enrolling = false;
+    pendingFactorId = null;
     msg('');
   }
   function logout(){
@@ -479,26 +472,12 @@
       if(r.error){ msg(r.error.message); return; }
       var totp = (r.data && r.data.totp) || [];
       var verified = totp.filter(function(f){ return f.status === 'verified'; });
+      if(!verified.length){ msg('No 2FA factor configured for this account.'); return; }
       $('stepPass').style.display = 'none';
       $('stepCode').style.display = '';
-      if(verified.length){
-        pendingFactorId = verified[0].id;
-        enrolling = false;
-        msg('Enter your 2FA code.');
-        $('totp').focus();
-      } else {
-        // First login: enroll a TOTP factor, show QR, verify below.
-        sb.auth.mfa.enroll({ factorType: 'totp' }).then(function(e){
-          if(e.error){ msg(e.error.message); return; }
-          pendingFactorId = e.data.id;
-          enrolling = true;
-          $('enrollQr').src = e.data.totp.qr_code;
-          $('enrollSecret').textContent = 'Secret: ' + e.data.totp.secret;
-          $('enrollBox').style.display = 'block';
-          msg('');
-          $('totp').focus();
-        });
-      }
+      pendingFactorId = verified[0].id;
+      msg('Enter your 2FA code.');
+      $('totp').focus();
     });
   }
 
