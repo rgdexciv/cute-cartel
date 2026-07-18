@@ -76,6 +76,13 @@
     font-family:inherit;font-size:.9rem;background:var(--blush);
   }
   #addForm input:focus,#addForm select:focus{outline:none;box-shadow:var(--pop-sm);background:#fff}
+  .photo-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .photo-chip{position:relative;width:74px}
+  .photo-chip img{width:74px;height:74px;object-fit:cover;border:var(--outline);border-radius:10px;display:block}
+  .photo-chip .main-tag{position:absolute;top:3px;left:3px;background:var(--sakura-deep);color:#fff;font-size:.6rem;padding:1px 5px;border-radius:6px}
+  .photo-chip .ctrls{display:flex;justify-content:center;gap:2px;margin-top:3px}
+  .photo-chip .ctrls button{border:var(--outline);background:var(--blush);border-radius:6px;cursor:pointer;font-size:.7rem;line-height:1;padding:3px 5px;font-family:inherit}
+  .row-thumb{width:38px;height:38px;object-fit:cover;border:var(--outline);border-radius:9px;display:block}
   .stock-input{width:70px;padding:6px 8px;border:var(--outline);border-radius:8px;font-family:inherit;font-size:.85rem;background:var(--blush)}
   .btn-primary{
     width:100%;padding:14px;margin-top:6px;
@@ -332,6 +339,12 @@
             <option>LIMITED</option>
           </select>
         </div>
+        <div style="margin-top:12px">
+          <label class="btn mini" for="npPhotos">📷 Add photos</label>
+          <input id="npPhotos" type="file" accept="image/*" multiple style="display:none" onchange="addPhotos(this)">
+          <span class="phint" id="photoHint">First photo is the main one. Drag order with ◀ ▶.</span>
+          <div id="npPhotoStrip" class="photo-strip"></div>
+        </div>
         <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
           <button class="btn pink" onclick="saveProduct()">Save product</button>
           <span class="phint" id="addMsg"></span>
@@ -550,10 +563,19 @@
 
   function stockClass(n){ return n === 0 ? 'stock-out' : (n <= 5 ? 'stock-low' : 'stock-ok'); }
 
+  // Main photo when the product has one, otherwise the emoji tile.
+  function rowThumb(p){
+    var urls = imageUrls(p);
+    if(urls.length){
+      return '<img class="row-thumb" src="' + esc(urls[0]) + '" alt="' + esc(p.name) + '">';
+    }
+    return '<span class="thumb" style="background:var(--' + esc(p.bg) + ')">' + esc(p.emoji) + '</span>';
+  }
+
   var editingId = null;
 
   function loadInventory(){
-    sb.from('products').select('*').order('created_at', { ascending: false }).then(function(r){
+    sb.from('products').select('*, product_images(path, sort_order)').order('created_at', { ascending: false }).then(function(r){
       if(r.error){ $('inventoryRows').innerHTML = '<tr><td colspan="5" class="phint">Error: ' + esc(r.error.message) + '</td></tr>'; return; }
       var rows = r.data || [];
       $('skuCount').textContent = rows.length + ' SKU' + (rows.length === 1 ? '' : 's');
@@ -564,7 +586,7 @@
       $('inventoryRows').innerHTML = rows.map(function(p){
         if(String(p.id) === editingId){
           return '<tr>' +
-            '<td class="prod"><span class="thumb" style="background:var(--' + esc(p.bg) + ')">' + esc(p.emoji) + '</span>' +
+            '<td class="prod">' + rowThumb(p) +
               '<input class="stock-input" type="text" value="' + esc(p.name) + '" data-edit-name="' + p.id + '"></td>' +
             '<td>' + esc(p.sku) + '</td>' +
             '<td>' + esc(p.variant || '—') + '</td>' +
@@ -574,7 +596,7 @@
           '</tr>';
         }
         return '<tr>' +
-          '<td class="prod"><span class="thumb" style="background:var(--' + esc(p.bg) + ')">' + esc(p.emoji) + '</span>' + esc(p.name) + '</td>' +
+          '<td class="prod">' + rowThumb(p) + esc(p.name) + '</td>' +
           '<td>' + esc(p.sku) + '</td>' +
           '<td>' + esc(p.variant || '—') + '</td>' +
           '<td>' + peso(p.price_cents) + '</td>' +
@@ -586,6 +608,101 @@
         '</tr>';
       }).join('');
     });
+  }
+
+  var MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+  // Photos chosen but not yet uploaded. Each entry is { file, url } where url is
+  // an object URL used only for the preview strip.
+  var pendingPhotos = [];
+
+  function addPhotos(input){
+    var picked = Array.prototype.slice.call(input.files || []);
+    var tooBig = picked.filter(function(f){ return f.size > MAX_PHOTO_BYTES; });
+    var ok = picked.filter(function(f){ return f.size <= MAX_PHOTO_BYTES; });
+    $('photoHint').textContent = tooBig.length
+      ? tooBig.length + ' photo(s) skipped — 5MB max each.'
+      : 'First photo is the main one. Reorder with ◀ ▶.';
+    pendingPhotos = pendingPhotos.concat(ok.map(function(f){
+      return { file: f, url: URL.createObjectURL(f) };
+    }));
+    input.value = '';
+    renderPhotoStrip();
+  }
+
+  function renderPhotoStrip(){
+    $('npPhotoStrip').innerHTML = pendingPhotos.map(function(p, i){
+      return '<div class="photo-chip">' +
+        (i === 0 ? '<span class="main-tag">MAIN</span>' : '') +
+        '<img src="' + p.url + '" alt="">' +
+        '<div class="ctrls">' +
+          '<button type="button" onclick="movePhoto(' + i + ',-1)" ' + (i === 0 ? 'disabled' : '') + '>◀</button>' +
+          '<button type="button" onclick="removePhoto(' + i + ')">✕</button>' +
+          '<button type="button" onclick="movePhoto(' + i + ',1)" ' + (i === pendingPhotos.length - 1 ? 'disabled' : '') + '>▶</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  function movePhoto(i, delta){
+    var j = i + delta;
+    if(j < 0 || j >= pendingPhotos.length) return;
+    var next = pendingPhotos.slice();
+    next[i] = pendingPhotos[j];
+    next[j] = pendingPhotos[i];
+    pendingPhotos = next;
+    renderPhotoStrip();
+  }
+
+  function removePhoto(i){
+    URL.revokeObjectURL(pendingPhotos[i].url);
+    pendingPhotos = pendingPhotos.filter(function(_, idx){ return idx !== i; });
+    renderPhotoStrip();
+  }
+
+  function clearPhotos(){
+    pendingPhotos.forEach(function(p){ URL.revokeObjectURL(p.url); });
+    pendingPhotos = [];
+    renderPhotoStrip();
+  }
+
+  // Uploads staged photos to storage, then records them in product_images with
+  // the order shown in the strip. Runs after the product row exists so failures
+  // leave a product without photos rather than orphaned files.
+  function uploadPhotos(productId, cb){
+    if(!pendingPhotos.length){ cb(null); return; }
+    var rows = [];
+    var i = 0;
+    (function step(){
+      if(i >= pendingPhotos.length){
+        sb.from('product_images').insert(rows).then(function(r){
+          cb(r.error ? r.error.message : null);
+        });
+        return;
+      }
+      var p = pendingPhotos[i];
+      var ext = (p.file.name.split('.').pop() || 'jpg').toLowerCase();
+      var path = productId + '/' + Date.now() + '-' + i + '.' + ext;
+      $('addMsg').textContent = 'Uploading photo ' + (i + 1) + ' of ' + pendingPhotos.length + '…';
+      sb.storage.from('product-images').upload(path, p.file, { contentType: p.file.type }).then(function(r){
+        if(r.error){ cb(r.error.message); return; }
+        rows.push({ product_id: productId, path: path, sort_order: i });
+        i++;
+        step();
+      });
+    })();
+  }
+
+  function photoUrl(path){
+    return sb.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+  }
+
+  // Products carry an embedded product_images array; sort it and hand back the
+  // ordered public URLs.
+  function imageUrls(p){
+    return (p.product_images || [])
+      .slice()
+      .sort(function(a, b){ return a.sort_order - b.sort_order; })
+      .map(function(img){ return photoUrl(img.path); });
   }
 
   var SKU_PREFIX = {
@@ -647,7 +764,7 @@
       emoji: $('npEmoji').value.trim() || '🧸',
       bg: $('npBg').value,
       badge: $('npBadge').value
-    }).then(function(r){
+    }).select('id').then(function(r){
       if(r.error){
         // 23505 = unique violation on sku. Something claimed it between our
         // lookup and this insert; recompute once before giving up.
@@ -661,11 +778,22 @@
         $('addMsg').textContent = r.error.message;
         return;
       }
-      $('addMsg').textContent = '';
-      ['npName','npJp','npSku','npVariant','npPrice','npStock','npEmoji'].forEach(function(id){ $(id).value = ''; });
-      skuTouched = false;
-      $('addForm').style.display = 'none';
-      loadInventory();
+      var productId = (r.data && r.data[0] && r.data[0].id);
+      uploadPhotos(productId, function(err){
+        if(err){
+          // The product saved; only its photos failed. Say so rather than
+          // implying the whole save was lost.
+          $('addMsg').textContent = 'Product saved, but photos failed: ' + err;
+          loadInventory();
+          return;
+        }
+        $('addMsg').textContent = '';
+        ['npName','npJp','npSku','npVariant','npPrice','npStock','npEmoji'].forEach(function(id){ $(id).value = ''; });
+        skuTouched = false;
+        clearPhotos();
+        $('addForm').style.display = 'none';
+        loadInventory();
+      });
     });
   }
 
