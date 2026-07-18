@@ -76,6 +76,13 @@
     font-family:inherit;font-size:.9rem;background:var(--blush);
   }
   #addForm input:focus,#addForm select:focus{outline:none;box-shadow:var(--pop-sm);background:#fff}
+  .edit-backdrop{display:none;position:fixed;inset:0;z-index:50;background:rgba(71,43,59,.45);
+    padding:18px;overflow-y:auto}
+  .edit-backdrop.open{display:grid;place-items:center}
+  .edit-modal{background:#fff;border:var(--outline);border-radius:16px;box-shadow:6px 6px 0 var(--ink);
+    padding:18px;width:100%;max-width:380px}
+  .edit-modal input, .edit-modal select{width:100%}
+  .edit-label{display:block;font-size:.78rem;font-weight:700;margin:10px 0 4px}
   .photo-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .photo-chip{position:relative;width:74px}
   .photo-chip img{width:74px;height:74px;object-fit:cover;border:var(--outline);border-radius:10px;display:block}
@@ -350,6 +357,32 @@
           <span class="phint" id="addMsg"></span>
         </div>
       </div>
+      <div class="edit-backdrop" id="editBackdrop" onclick="if(event.target===this) closeEdit()">
+        <div class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+          <h2 id="editTitle">Edit product</h2>
+          <label class="edit-label" for="edName">Name</label>
+          <input id="edName">
+          <label class="edit-label" for="edPrice">Price ₱</label>
+          <input id="edPrice" type="number" min="0" step="0.01">
+          <label class="edit-label" for="edCategory">Category</label>
+          <select id="edCategory" onchange="previewSkuChange()">
+            <option value="plushies">Plushies 🧸</option>
+            <option value="stationery">Stationery ✏️</option>
+            <option value="snacks">Snacks 🍬</option>
+            <option value="sakura">Sakura 🌸</option>
+            <option value="keychains">Keychains &amp; Charms 🧷</option>
+            <option value="home">Home &amp; Desk 🍮</option>
+            <option value="accessories">Accessories 🎀</option>
+            <option value="stickers">Stickers &amp; Deco ✨</option>
+          </select>
+          <p class="phint" id="edSkuNote"></p>
+          <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+            <button class="btn pink" onclick="saveEdit()">Save changes</button>
+            <button class="btn mini" onclick="closeEdit()">Cancel</button>
+            <span class="phint" id="edMsg"></span>
+          </div>
+        </div>
+      </div>
       <div class="panel">
         <div class="panel-head"><h2>Products &amp; variants</h2><span class="pill pink" id="skuCount">0 SKUs</span></div>
         <table>
@@ -572,29 +605,20 @@
     return '<span class="thumb" style="background:var(--' + esc(p.bg) + ')">' + esc(p.emoji) + '</span>';
   }
 
-  var editingId = null;
+  // Latest inventory rows, so the edit modal can populate itself without refetching.
+  var inventoryCache = [];
 
   function loadInventory(){
     sb.from('products').select('*, product_images(path, sort_order)').order('created_at', { ascending: false }).then(function(r){
       if(r.error){ $('inventoryRows').innerHTML = '<tr><td colspan="5" class="phint">Error: ' + esc(r.error.message) + '</td></tr>'; return; }
       var rows = r.data || [];
+      inventoryCache = rows;
       $('skuCount').textContent = rows.length + ' SKU' + (rows.length === 1 ? '' : 's');
       if(!rows.length){
         $('inventoryRows').innerHTML = '<tr><td colspan="5" class="phint">No products yet. Add your first product to get started.</td></tr>';
         return;
       }
       $('inventoryRows').innerHTML = rows.map(function(p){
-        if(String(p.id) === editingId){
-          return '<tr>' +
-            '<td class="prod">' + rowThumb(p) +
-              '<input class="stock-input" type="text" value="' + esc(p.name) + '" data-edit-name="' + p.id + '"></td>' +
-            '<td>' + esc(p.sku) + '</td>' +
-            '<td>' + esc(p.variant || '—') + '</td>' +
-            '<td><input class="stock-input" type="number" min="0" step="0.01" value="' + (p.price_cents / 100) + '" data-edit-price="' + p.id + '"></td>' +
-            '<td><button class="btn mini" onclick="saveEdit(this)" data-id="' + p.id + '">Save</button> ' +
-              '<button class="btn mini" onclick="cancelEdit()">Cancel</button></td>' +
-          '</tr>';
-        }
         return '<tr>' +
           '<td class="prod">' + rowThumb(p) + esc(p.name) + '</td>' +
           '<td>' + esc(p.sku) + '</td>' +
@@ -866,19 +890,81 @@
     });
   }
 
-  function startEdit(btn){ editingId = btn.dataset.id; loadInventory(); }
+  // The product currently open in the edit modal.
+  var editing = null;
 
-  function cancelEdit(){ editingId = null; loadInventory(); }
-
-  function saveEdit(btn){
+  function startEdit(btn){
     var id = btn.dataset.id;
-    var name = document.querySelector('[data-edit-name="' + id + '"]').value.trim();
-    var price = parseFloat(document.querySelector('[data-edit-price="' + id + '"]').value);
-    if(!name){ alert('Name is required.'); return; }
-    if(isNaN(price) || price < 0){ alert('Price must be 0 or more.'); return; }
-    sb.from('products').update({ name: name, price_cents: Math.round(price * 100) }).eq('id', id).then(function(r){
-      if(r.error){ alert(r.error.message); return; }
-      editingId = null;
+    editing = inventoryCache.filter(function(p){ return String(p.id) === id; })[0];
+    if(!editing) return;
+    $('edName').value = editing.name;
+    $('edPrice').value = editing.price_cents / 100;
+    $('edCategory').value = editing.category || 'plushies';
+    $('edMsg').textContent = '';
+    $('edSkuNote').textContent = 'SKU ' + editing.sku;
+    $('editBackdrop').classList.add('open');
+  }
+
+  function closeEdit(){
+    editing = null;
+    $('editBackdrop').classList.remove('open');
+  }
+
+  // Changing category renumbers the SKU, so show what it will become before
+  // the user commits to it.
+  function previewSkuChange(){
+    if(!editing) return;
+    if($('edCategory').value === editing.category){
+      $('edSkuNote').textContent = 'SKU ' + editing.sku;
+      return;
+    }
+    $('edSkuNote').textContent = 'SKU ' + editing.sku + ' → calculating…';
+    nextSku($('edCategory').value, function(sku){
+      if(!editing) return;
+      $('edSkuNote').textContent = sku
+        ? 'SKU ' + editing.sku + ' → ' + sku
+        : 'SKU ' + editing.sku + ' (could not renumber)';
+    });
+  }
+
+  function saveEdit(){
+    if(!editing) return;
+    var id = editing.id;
+    var name = $('edName').value.trim();
+    var price = parseFloat($('edPrice').value);
+    var category = $('edCategory').value;
+    if(!name){ $('edMsg').textContent = 'Name is required.'; return; }
+    if(isNaN(price) || price < 0){ $('edMsg').textContent = 'Price must be 0 or more.'; return; }
+
+    var patch = { name: name, price_cents: Math.round(price * 100), category: category };
+    if(category === editing.category){ commitEdit(id, patch); return; }
+
+    $('edMsg').textContent = 'Renumbering SKU…';
+    nextSku(category, function(sku){
+      if(sku){ patch.sku = sku; }
+      commitEdit(id, patch);
+    });
+  }
+
+  function commitEdit(id, patch, retried){
+    $('edMsg').textContent = 'Saving…';
+    sb.from('products').update(patch).eq('id', id).then(function(r){
+      if(r.error){
+        // Another product claimed the regenerated SKU; recompute once.
+        if(r.error.code === '23505' && patch.sku && !retried){
+          nextSku(patch.category, function(fresh){
+            if(!fresh){ $('edMsg').textContent = 'That SKU is already taken.'; return; }
+            var next = {};
+            Object.keys(patch).forEach(function(k){ next[k] = patch[k]; });
+            next.sku = fresh;
+            commitEdit(id, next, true);
+          });
+          return;
+        }
+        $('edMsg').textContent = r.error.message;
+        return;
+      }
+      closeEdit();
       loadInventory();
     });
   }
