@@ -616,18 +616,41 @@
   // an object URL used only for the preview strip.
   var pendingPhotos = [];
 
+  // Android hands back a File that is only a handle to an OS-managed URI. If the
+  // backing file is regenerated or evicted before upload, Chromium aborts the
+  // request as it reads (ERR_UPLOAD_FILE_CHANGED) and fetch rejects with a bare
+  // "Failed to fetch". Copying the bytes here means the upload no longer depends
+  // on that handle still being valid later.
   function addPhotos(input){
     var picked = Array.prototype.slice.call(input.files || []);
     var tooBig = picked.filter(function(f){ return f.size > MAX_PHOTO_BYTES; });
     var ok = picked.filter(function(f){ return f.size <= MAX_PHOTO_BYTES; });
+    input.value = '';
     $('photoHint').textContent = tooBig.length
       ? tooBig.length + ' photo(s) skipped — 5MB max each.'
-      : 'First photo is the main one. Reorder with ◀ ▶.';
-    pendingPhotos = pendingPhotos.concat(ok.map(function(f){
-      return { file: f, url: URL.createObjectURL(f) };
-    }));
-    input.value = '';
-    renderPhotoStrip();
+      : 'Reading photos…';
+
+    var i = 0;
+    (function step(){
+      if(i >= ok.length){
+        $('photoHint').textContent = 'First photo is the main one. Reorder with ◀ ▶.';
+        return;
+      }
+      var f = ok[i];
+      f.arrayBuffer().then(function(buf){
+        var blob = new Blob([buf], { type: f.type || 'image/jpeg' });
+        pendingPhotos = pendingPhotos.concat([{
+          blob: blob, name: f.name || 'photo.jpg', url: URL.createObjectURL(blob)
+        }]);
+        renderPhotoStrip();
+        i++;
+        step();
+      }).catch(function(){
+        $('photoHint').textContent = 'Could not read "' + (f.name || 'photo') + '". Pick it again.';
+        i++;
+        step();
+      });
+    })();
   }
 
   function renderPhotoStrip(){
@@ -675,21 +698,53 @@
     (function step(){
       if(i >= pendingPhotos.length){
         sb.from('product_images').insert(rows).then(function(r){
-          cb(r.error ? r.error.message : null);
+          cb(r.error ? r.error.message : null,
+             rows.map(function(row){ return row.path; }));
         });
         return;
       }
       var p = pendingPhotos[i];
-      var ext = (p.file.name.split('.').pop() || 'jpg').toLowerCase();
+      var ext = (p.name.split('.').pop() || 'jpg').toLowerCase();
       var path = productId + '/' + Date.now() + '-' + i + '.' + ext;
       $('addMsg').textContent = 'Uploading photo ' + (i + 1) + ' of ' + pendingPhotos.length + '…';
-      sb.storage.from('product-images').upload(path, p.file, { contentType: p.file.type }).then(function(r){
-        if(r.error){ cb(r.error.message); return; }
+
+      attemptUpload(path, p.blob, 2, function(err){
+        if(err){
+          cb('photo ' + (i + 1) + ' (' + p.name + '): ' + err,
+             rows.map(function(row){ return row.path; }).concat([path]));
+          return;
+        }
         rows.push({ product_id: productId, path: path, sort_order: i });
         i++;
         step();
       });
     })();
+  }
+
+  // One retry, since a dropped mobile connection is worth a second try but a
+  // rejected upload is not worth hammering.
+  function attemptUpload(path, blob, triesLeft, cb){
+    sb.storage.from('product-images').upload(path, blob, { contentType: blob.type })
+      .then(function(r){
+        if(!r.error){ cb(null); return; }
+        if(triesLeft > 1){
+          setTimeout(function(){ attemptUpload(path, blob, triesLeft - 1, cb); }, 800);
+          return;
+        }
+        cb(r.error.message);
+      });
+  }
+
+  // Undo a half-finished save: drop any uploaded files, then the product row
+  // (which cascades to product_images). Failures here are not surfaced — the
+  // caller is already reporting the original error.
+  function rollbackProduct(productId, paths, done){
+    var cleanup = (paths && paths.length)
+      ? sb.storage.from('product-images').remove(paths)
+      : Promise.resolve();
+    cleanup.then(function(){
+      return sb.from('products').delete().eq('id', productId);
+    }).then(done, done);
   }
 
   function photoUrl(path){
@@ -779,12 +834,15 @@
         return;
       }
       var productId = (r.data && r.data[0] && r.data[0].id);
-      uploadPhotos(productId, function(err){
+      uploadPhotos(productId, function(err, paths){
         if(err){
-          // The product saved; only its photos failed. Say so rather than
-          // implying the whole save was lost.
-          $('addMsg').textContent = 'Product saved, but photos failed: ' + err;
-          loadInventory();
+          // Roll the product back so a retry does not pile up half-saved rows.
+          // The form still holds everything the user typed, so pressing Save
+          // again is a clean second attempt.
+          rollbackProduct(productId, paths, function(){
+            $('addMsg').textContent = 'Photos failed: ' + err + ' — nothing saved, press Save to retry.';
+            loadInventory();
+          });
           return;
         }
         $('addMsg').textContent = '';
