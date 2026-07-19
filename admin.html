@@ -99,8 +99,6 @@
   }
   .btn-primary:active{transform:translate(4px,4px);box-shadow:2px 2px 0 var(--ink)}
   .hint{margin-top:16px;font-size:.75rem;color:var(--muted)}
-  .mfa-qr{width:170px;height:170px;border:var(--outline);border-radius:12px;background:#fff;display:block;margin:12px 0}
-  .mfa-secret{font-family:monospace;font-size:.78rem;background:var(--blush);border:2px dashed var(--ink);border-radius:8px;padding:6px 10px;word-break:break-all;margin-bottom:6px}
   .hint code{background:var(--butter);padding:2px 6px;border-radius:6px;border:2px solid var(--ink)}
 
   /* ---------- APP SHELL ---------- */
@@ -230,12 +228,6 @@
       <div class="field" id="stepPass">
         <label>Password</label>
         <input type="password" id="pass" autocomplete="current-password" required>
-      </div>
-      <div class="field" id="stepEnroll" style="display:none">
-        <label>Set up 2FA</label>
-        <p class="hint">Scan this with your authenticator app, then enter the 6-digit code below.</p>
-        <img class="mfa-qr" id="mfaQr" alt="2FA setup QR code">
-        <div class="mfa-secret" id="mfaSecret"></div>
       </div>
       <div class="field" id="stepCode" style="display:none">
         <label>2FA Code</label>
@@ -507,7 +499,6 @@
     $('app').style.display = 'none';
     $('login').style.display = 'flex';
     $('stepPass').style.display = '';
-    $('stepEnroll').style.display = 'none';
     $('stepCode').style.display = 'none';
     $('pass').value = ''; $('totp').value = '';
     pendingFactorId = null;
@@ -530,7 +521,8 @@
       if(r.error){ msg(r.error.message); return; }
       var all = (r.data && r.data.all) || [];
       var verified = all.filter(function(f){ return f.status === 'verified'; });
-      if(!verified.length){ beginEnrollStep(all); return; }
+      // The factor is provisioned server-side; there is no in-app enrolment.
+      if(!verified.length){ msg('No 2FA factor configured for this account.'); return; }
       $('stepPass').style.display = 'none';
       $('stepCode').style.display = '';
       pendingFactorId = verified[0].id;
@@ -539,27 +531,6 @@
     });
   }
 
-  // First-time setup: enroll a TOTP factor and show the QR to scan.
-  function beginEnrollStep(existing){
-    // Clear out any half-finished enrolment so we always start clean.
-    var stale = (existing || []).filter(function(f){ return f.status !== 'verified'; });
-    var cleanup = stale.map(function(f){ return sb.auth.mfa.unenroll({ factorId: f.id }); });
-    Promise.all(cleanup).then(function(){
-      // No friendlyName: Supabase rejects duplicates, and a leftover factor
-      // would then block enrolment permanently.
-      return sb.auth.mfa.enroll({ factorType: 'totp' });
-    }).then(function(e){
-      if(e.error){ msg(e.error.message); return; }
-      pendingFactorId = e.data.id;
-      $('mfaQr').src = e.data.totp.qr_code;
-      $('mfaSecret').textContent = e.data.totp.secret;
-      $('stepPass').style.display = 'none';
-      $('stepEnroll').style.display = '';
-      $('stepCode').style.display = '';
-      msg('Scan the code, then enter the 6 digits to finish setup.');
-      $('totp').focus();
-    });
-  }
 
   function verifyCode(code){
     sb.auth.mfa.challenge({ factorId: pendingFactorId }).then(function(c){
