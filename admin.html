@@ -91,6 +91,11 @@
   .photo-chip .ctrls button{border:var(--outline);background:var(--blush);border-radius:6px;cursor:pointer;font-size:.7rem;line-height:1;padding:3px 5px;font-family:inherit}
   .row-thumb{width:38px;height:38px;object-fit:cover;border:var(--outline);border-radius:9px;display:block}
   .stock-input{width:70px;padding:6px 8px;border:var(--outline);border-radius:8px;font-family:inherit;font-size:.85rem;background:var(--blush)}
+  .order-select{padding:6px 8px;border:var(--outline);border-radius:8px;font-family:inherit;font-size:.8rem;background:var(--blush)}
+  .order-row{cursor:pointer}
+  .order-detail td{background:var(--blush);font-size:.82rem}
+  .order-detail ul{margin:0;padding-left:18px}
+  .order-detail .track{color:var(--muted);margin-top:8px}
   .btn-primary{
     width:100%;padding:14px;margin-top:6px;
     background:var(--sakura-deep);color:#fff;font-family:'Mochiy Pop One';
@@ -396,12 +401,13 @@
 
     <!-- ORDERS -->
     <section class="view" id="v-orders">
-      <div class="toolbar">
-        <button class="btn pink">All</button>
-        <button class="btn">Pending</button>
-        <button class="btn">Paid</button>
-        <button class="btn">Shipped</button>
-        <button class="btn">⬆ Export CSV</button>
+      <div class="toolbar" id="orderFilters">
+        <button class="btn pink" data-status="all" onclick="filterOrders(this)">All</button>
+        <button class="btn" data-status="placed" onclick="filterOrders(this)">Placed</button>
+        <button class="btn" data-status="shipped" onclick="filterOrders(this)">Shipped</button>
+        <button class="btn" data-status="in_transit" onclick="filterOrders(this)">In transit</button>
+        <button class="btn" data-status="delivered" onclick="filterOrders(this)">Delivered</button>
+        <button class="btn" data-status="cancelled" onclick="filterOrders(this)">Cancelled</button>
       </div>
       <div class="panel">
         <div class="panel-head"><h2>Orders</h2><span class="pill green" id="orderCount">0 this month</span></div>
@@ -580,6 +586,7 @@
     document.getElementById('sidebar').classList.remove('open');
     window.scrollTo(0,0);
     if(view === 'inventory') loadInventory();
+    if(view === 'orders') loadOrders();
   }
 
   /* ===== Inventory (Supabase-backed) ===== */
@@ -973,6 +980,130 @@
     sb.from('products').delete().eq('id', btn.dataset.id).then(function(r){
       if(r.error){ alert(r.error.message); return; }
       loadInventory();
+    });
+  }
+
+  /* ===== Orders (Supabase-backed) ===== */
+
+  // Must stay in step with the check constraints in migration-orders-admin.sql.
+  var ORDER_STATUSES = ['placed', 'shipped', 'in_transit', 'delivered', 'cancelled'];
+  var PAYMENT_STATUSES = ['unpaid', 'paid', 'refunded'];
+
+  var orderCache = [];
+  var orderFilter = 'all';
+  var expandedOrderId = null;
+
+  function statusLabel(s){ return String(s || '').replace(/_/g, ' '); }
+
+  function orderDate(iso){
+    return new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function selectHtml(kind, id, current, options){
+    return '<select class="order-select" data-kind="' + kind + '" data-id="' + id + '" ' +
+      'onclick="event.stopPropagation()" onchange="updateOrderField(this)">' +
+      options.map(function(o){
+        return '<option value="' + o + '"' + (o === current ? ' selected' : '') + '>' + esc(statusLabel(o)) + '</option>';
+      }).join('') + '</select>';
+  }
+
+  // orders.user_id points at auth.users, not profiles, so PostgREST cannot embed
+  // the customer. Fetch the profiles for the user ids we actually got instead.
+  function loadOrders(){
+    sb.from('orders')
+      .select('*, order_items(id, product_name, emoji, qty, price_cents), tracking_events(status, note, location, happened_at)')
+      .order('placed_at', { ascending: false })
+      .then(function(r){
+        if(r.error){ $('orderRows').innerHTML = '<tr><td colspan="7" class="phint">Error: ' + esc(r.error.message) + '</td></tr>'; return; }
+        var rows = r.data || [];
+        var ids = rows.map(function(o){ return o.user_id; }).filter(function(v, i, a){ return a.indexOf(v) === i; });
+        if(!ids.length){ orderCache = rows; renderOrders(); return; }
+        sb.from('profiles').select('id, full_name, email').in('id', ids).then(function(p){
+          var names = {};
+          (p.data || []).forEach(function(row){ names[row.id] = row.full_name || row.email || '—'; });
+          orderCache = rows.map(function(o){
+            return Object.assign({}, o, { customer: names[o.user_id] || 'Unknown' });
+          });
+          renderOrders();
+        });
+      });
+  }
+
+  function filterOrders(btn){
+    orderFilter = btn.dataset.status;
+    document.querySelectorAll('#orderFilters .btn').forEach(function(b){ b.classList.remove('pink'); });
+    btn.classList.add('pink');
+    renderOrders();
+  }
+
+  function toggleOrderDetail(id){
+    expandedOrderId = expandedOrderId === id ? null : id;
+    renderOrders();
+  }
+
+  function detailHtml(o){
+    var items = (o.order_items || []).map(function(i){
+      return '<li>' + esc(i.emoji || '') + ' ' + esc(i.product_name) + ' × ' + i.qty +
+        ' — ' + peso(i.price_cents * i.qty) + '</li>';
+    }).join('');
+    var events = (o.tracking_events || [])
+      .slice()
+      .sort(function(a, b){ return new Date(a.happened_at) - new Date(b.happened_at); })
+      .map(function(t){
+        return esc(statusLabel(t.status)) + ' — ' + esc(t.note || '') +
+          (t.location ? ' (' + esc(t.location) + ')' : '') + ' · ' + orderDate(t.happened_at);
+      }).join('<br>');
+    return '<tr class="order-detail"><td colspan="7">' +
+      '<strong>Items</strong><ul>' + (items || '<li>No items recorded.</li>') + '</ul>' +
+      (events ? '<div class="track"><strong>Tracking</strong><br>' + events + '</div>' : '') +
+      '</td></tr>';
+  }
+
+  function renderOrders(){
+    var rows = orderFilter === 'all'
+      ? orderCache
+      : orderCache.filter(function(o){ return o.status === orderFilter; });
+
+    var thisMonth = orderCache.filter(function(o){
+      var d = new Date(o.placed_at), n = new Date();
+      return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+    }).length;
+    $('orderCount').textContent = thisMonth + ' this month';
+
+    if(!rows.length){
+      $('orderRows').innerHTML = '<tr><td colspan="7" class="phint">' +
+        (orderFilter === 'all' ? 'No orders yet.' : 'No ' + statusLabel(orderFilter) + ' orders.') + '</td></tr>';
+      return;
+    }
+
+    $('orderRows').innerHTML = rows.map(function(o){
+      var itemCount = (o.order_items || []).reduce(function(n, i){ return n + i.qty; }, 0);
+      var row = '<tr class="order-row" onclick="toggleOrderDetail(\'' + o.id + '\')">' +
+        '<td>' + esc(o.order_no) + '</td>' +
+        '<td>' + esc(o.customer) + '</td>' +
+        '<td>' + orderDate(o.placed_at) + '</td>' +
+        '<td>' + itemCount + '</td>' +
+        '<td>' + peso(o.total_cents) + '</td>' +
+        '<td>' + selectHtml('payment_status', o.id, o.payment_status, PAYMENT_STATUSES) + '</td>' +
+        '<td>' + selectHtml('status', o.id, o.status, ORDER_STATUSES) + '</td>' +
+      '</tr>';
+      return o.id === expandedOrderId ? row + detailHtml(o) : row;
+    }).join('');
+  }
+
+  function updateOrderField(sel){
+    var id = sel.dataset.id, kind = sel.dataset.kind, value = sel.value;
+    var patch = {};
+    patch[kind] = value;
+    sel.disabled = true;
+    sb.from('orders').update(patch).eq('id', id).then(function(r){
+      sel.disabled = false;
+      if(r.error){ alert(r.error.message); loadOrders(); return; }
+      orderCache = orderCache.map(function(o){
+        return o.id === id ? Object.assign({}, o, patch) : o;
+      });
+      // A status change can move the row out of the active filter.
+      if(kind === 'status' && orderFilter !== 'all') renderOrders();
     });
   }
 </script>
