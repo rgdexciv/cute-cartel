@@ -1,2 +1,6 @@
 .vercel
 .env*
+
+# Supabase CLI scratch: caches which project the working copy is linked to.
+# Local state, not project source.
+supabase/.temp
