@@ -16,17 +16,22 @@ const SITE_URL = Deno.env.get('SITE_URL') ?? 'https://cute-cartel.vercel.app';
 const PAYMONGO_API = 'https://api.paymongo.com/v1/checkout_sessions';
 const PAYMENT_METHODS = ['card', 'gcash', 'paymaya', 'grab_pay'];
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': SITE_URL,
-  'Access-Control-Allow-Headers': 'authorization, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// SITE_URL is the canonical site, but the same build also runs on Vercel
+// preview deployments. Pinning Allow-Origin to SITE_URL alone made every other
+// origin fail preflight, which the browser reports as a network error rather
+// than anything a buyer could act on. Echo the caller's origin when it is one
+// of ours, and fall back to SITE_URL so an unknown origin is still refused.
+const PREVIEW_ORIGIN = /^https:\/\/cute-cartel-[a-z0-9-]+\.vercel\.app$/;
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
+function corsHeaders(origin: string | null): Record<string, string> {
+  const isOurs = origin === SITE_URL || (!!origin && PREVIEW_ORIGIN.test(origin));
+  return {
+    'Access-Control-Allow-Origin': isOurs ? (origin as string) : SITE_URL,
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    // The response body varies by caller, so caches must key on Origin.
+    Vary: 'Origin',
+  };
 }
 
 // PayMongo's error envelope is an array of detail objects. Surfacing their raw
@@ -37,6 +42,15 @@ function logProviderError(stage: string, detail: unknown): void {
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const CORS_HEADERS = corsHeaders(req.headers.get('Origin'));
+
+  function json(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
