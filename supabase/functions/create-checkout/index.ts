@@ -51,6 +51,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  // A refused origin is invisible from the browser side: it just reports a
+  // failed fetch. Log what actually asked so a mismatch is one log line away.
+  console.log(`[create-checkout] ${req.method} from origin:`, req.headers.get('Origin'));
+
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
